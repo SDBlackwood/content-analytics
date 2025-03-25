@@ -1,0 +1,121 @@
+services:
+  # Directly from https://hub.docker.com/r/apache/kafka
+  kafka:
+    image: apache/kafka:latest
+    container_name: broker
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://kafka:9092,CONTROLLER://kafka:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 3
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server=kafka:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    ports:
+      - "0.0.0.0:9092:9092"
+      - "0.0.0.0:9093:9093"
+
+  # Run the script to create a topic
+  kafka-init:
+    image: apache/kafka:latest
+    container_name: kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    volumes:
+      - ./content_analytics/bin/init-kafka.sh:/init-kafka.sh
+    entrypoint: ["/bin/sh", "/init-kafka.sh"]
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "0.0.0.0:8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+
+  # Object Storage
+  minio:
+    image: minio/minio
+    container_name: minio
+    ports:
+      - "0.0.0.0:9000:9000"
+      - "0.0.0.0:9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # MinIO buckets on startup
+  minio-setup:
+    image: minio/mc
+    container_name: minio-setup
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      /usr/bin/mc config host add myminio http://minio:9000 minioadmin minioadmin;
+      /usr/bin/mc mb --ignore-existing myminio/content-analytics;
+      echo 'MinIO buckets created successfully';
+      exit 0;
+      "
+
+  event-generator:
+    build:
+      context: .
+      dockerfile: docker/generate/Dockerfile
+    container_name: event-generator
+    depends_on:
+      kafka:
+        condition: service_healthy
+    volumes:
+      - ./content_analytics:/app/content_analytics
+    command: python -m content_analytics.bin.generate_events
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - BATCH_SIZE=1000000
+      - TOPIC=media-events
+    restart: on-failure
+
+  store-events:
+    build:
+      context: .
+      dockerfile: docker/generate/Dockerfile
+    container_name: store-events
+    depends_on:
+      kafka:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    volumes:
+      - ./content_analytics:/app/content_analytics
+    command: python -m content_analytics.store_events_simple
+
+volumes:
+  postgres-db-volume:
+  minio_data: 
