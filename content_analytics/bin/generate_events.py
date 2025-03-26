@@ -26,11 +26,14 @@ EVENT_TYPES = ["play", "pause", "stop"]
 EVENT_SOURCES = ["web_app", "mobile_app", "smart_tv", "streaming_device"]
 LANGUAGES = ["en", "es", "fr"]
 
+# Generate 100 random titles
+TITLES = [fake.catch_phrase() for _ in range(100)]
+
 
 def generate_random_user():
     return {
-        "user_id": f"user_{uuid.uuid4().hex[:8]}",
-        "device_id": f"{random.choice(EVENT_SOURCES)}_{uuid.uuid4().hex[:6]}",
+        "user_id": f"user_{uuid.uuid4()}",
+        "device_id": f"{random.choice(EVENT_SOURCES)}_{uuid.uuid4()}",
         "ip_address": fake.ipv4(),
     }
 
@@ -43,9 +46,9 @@ def generate_random_content():
     )
 
     return {
-        "content_id": f"content_{uuid.uuid4().hex[:8]}",
+        "content_id": f"content_{uuid.uuid4()}",
         "content_type": content_type,
-        "title": fake.catch_phrase(),
+        "title": random.choice(TITLES),
         "genre": random.choice(GENRES),
         "duration_seconds": duration,
         "language": random.choice(LANGUAGES),
@@ -60,6 +63,7 @@ def generate_media_event(event_type=None, user=None, content=None):
     if not content:
         content = generate_random_content()
 
+    # Set play to be at the start but stop/pause to be somewhere random
     current_timestamp = (
         0.0 if event_type == "play" else random.uniform(0, content["duration_seconds"])
     )

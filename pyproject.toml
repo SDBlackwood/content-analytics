@@ -31,6 +31,7 @@ ruff = "^0.11.2"
 kafka-python-ng = "^2.2.3"
 faker = "^37.1.0"
 pydantic-settings = "^2.8.1"
+pytest = "^8.3.5"
 
 [tool.poetry.requires-plugins]
 poetry-plugin-export = ">=1.8"

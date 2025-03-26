@@ -16,7 +16,7 @@ class MediaEvent(BaseModel):
         ...,
         description="Type of media event that occurred",
     )
-    timestamp: datetime = Field(
+    timestamp: str = Field(
         ...,
         description="Timestamp of when the event occurred",
     )
@@ -64,3 +64,8 @@ class MediaEvent(BaseModel):
     event_source: str = Field(
         ..., description="Source of the event (e.g., web_app, mobile_app)"
     )
+
+    # Allow for additional fields
+    model_config = {
+        "extra": "allow",
+    }

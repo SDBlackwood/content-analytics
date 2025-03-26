@@ -15,13 +15,13 @@ class Settings(BaseSettings):
         "content-analytics-consumer", description="Consumer group ID"
     )
     kafka_auto_offset_reset: str = Field(
-        "latest", description="Auto offset reset (latest, earliest)"
+        "latest", description="Offset policy i.e read from latest or earliest"
     )
 
     # S3 settings
     s3_endpoint_url: Optional[str] = Field(
-        "http://minio:9000",
-        description="S3-compatible endpoint URL (set to None for AWS S3)",
+        "http://localhost:9000",
+        description="Endpoint URL",
     )
     s3_access_key_id: str = Field("minioadmin", description="S3 access key ID")
     s3_secret_access_key: str = Field("minioadmin", description="S3 secret access key")
