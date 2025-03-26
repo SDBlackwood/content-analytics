@@ -20,7 +20,7 @@ def store_events(consumer, s3_client):
     Consumes a batch of messages from Kafka and stores as Parquet files in Object Storage
     """
     print(f"Starting batch processing at {datetime.now()}")
- 
+
     messages = []
     message_count = 0
     start_time = datetime.now()

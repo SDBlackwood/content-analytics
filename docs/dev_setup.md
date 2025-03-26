@@ -23,7 +23,7 @@ poetry run python content_analytics/bin/generate_events.py
 4. Run the storage script:
 
 ```bash
-poetry run python content_analytics/bin/storage.py
+poetry run python content_analytics/storage/storage.py
 ```
 
 5. Run the tests:

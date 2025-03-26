@@ -87,36 +87,6 @@ services:
       exit 0;
       "
 
-  event-generator:
-    build:
-      context: .
-      dockerfile: docker/generate/Dockerfile
-    container_name: event-generator
-    depends_on:
-      kafka:
-        condition: service_healthy
-    volumes:
-      - ./content_analytics:/app/content_analytics
-    command: python -m content_analytics.bin.generate_events
-    environment:
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - BATCH_SIZE=1000000
-      - TOPIC=media-events
-    restart: on-failure
-
-  # store-events:
-  #   build:
-  #     context: .
-  #     dockerfile: docker/generate/Dockerfile
-  #   container_name: store-events
-  #   depends_on:
-  #     kafka:
-  #       condition: service_healthy
-  #     minio:
-  #       condition: service_healthy
-  #   volumes:
-  #     - ./content_analytics:/app/content_analytics
-  #   command: python -m content_analytics.store_events_simple
 
 volumes:
   postgres-db-volume:
