@@ -7,12 +7,13 @@ import pydantic
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
-from kafka.consumer import KafkaConsumer
+from kafka import KafkaConsumer
 import boto3
 
 # Import settings parsed from env
-from utils.config import settings
-from utils.data_model import MediaEvent
+from content_analytics.utils.config import settings
+from content_analytics.utils.data_model import MediaEvent
+
 
 def store_events():
     """
@@ -23,18 +24,18 @@ def store_events():
     # Create Kafka consumer
     consumer = None
     s3_client = None
-    
+
     try:
         # Create Kafka consumer
         consumer = KafkaConsumer(
             settings.kafka_topic,
-            bootstrap_servers=settings.kafka_bootstrap_servers,
+            bootstrap_servers="localhost:29092",  # Use external listener address
             auto_offset_reset=settings.kafka_auto_offset_reset,
             # Consume valyes as JSON https://kafka-python.readthedocs.io/en/master/usage.html
             value_deserializer=lambda m: json.loads(m.decode("utf-8")),
             max_poll_records=settings.batch_size,
             max_poll_interval_ms=settings.batch_max_poll_interval_ms,
-            group_id=settings.kakfa_topic,
+            group_id=settings.kafka_topic,
         )
 
         # Object storage client - works with both AWS S3 and minio
@@ -81,7 +82,9 @@ def store_events():
                         messages.append(MediaEvent.model_validate(message.value))
                         message_count += 1
                     except pydantic.ValidationError:
-                        print(f"Pydantic validation error processing message, skipping...")
+                        print(
+                            f"Pydantic validation error processing message, skipping..."
+                        )
                         continue
                     except Exception as e:
                         print(f"Error processing message: {e}")
@@ -92,7 +95,7 @@ def store_events():
 
                 if message_count >= settings.batch_size:
                     break
-                
+
         if not messages:
             print("No messages received from Kafka. Exiting.")
             return
@@ -105,6 +108,7 @@ def store_events():
             consumer.close()
         if s3_client:
             s3_client.close()
+
 
 def __store_as_parquet(df, s3_client):
     # Add a date column for partitioning
@@ -147,6 +151,7 @@ def __store_as_parquet(df, s3_client):
             print(f"Successfully uploaded {s3_key} to S3")
 
     print(f"Batch processing completed at {datetime.now()}")
+
 
 if __name__ == "__main__":
     store_events()

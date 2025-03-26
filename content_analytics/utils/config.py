@@ -8,7 +8,7 @@ class Settings(BaseSettings):
 
     # Kafka settings
     kafka_bootstrap_servers: str = Field(
-        "kafka:9092", description="Kafka bootstrap servers"
+        "localhost:29092", description="Kafka bootstrap servers"
     )
     kafka_topic: str = Field("media-events", description="Kafka topic for media events")
     kafka_group_id: str = Field(
@@ -73,9 +73,7 @@ class Settings(BaseSettings):
     app_host: str = Field("0.0.0.0", description="Application host")
     app_port: int = Field(8000, description="Application port")
 
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 # Create a singleton instance that can be imported

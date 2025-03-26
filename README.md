@@ -3,18 +3,13 @@
 ## Part 1: High-Level Architecture Design
 
 ### Ingestion
-To start with the end goal in mind, the output of the ingestion processes should be a set of parquet files which allow for batch processing
-of the event data for analytics and a set of time series observability data for operational user.  
+To start with the end goal in mind, the output of the ingestion processes should be a set of parquet files which allow for batch processing of the event data for analytics and a set of time series observability data for operational user.  
 
-The system ingests data via the users device via a HTTP POST request made by the users device when a content analytic event is created.
-Simple HTTP REST is used here as there is no need for anything more complex.  A single user will only make at max a few events per minute, e.g.
-an event to press play on a content item, a few events to seek forward, an event to pause or stop etc.  In a scenario where the user was interacting with 
+The system ingests data via the users device via a HTTP POST request made by the users device when a content analytic event is created. Simple HTTP REST is used here as there is no need for anything more complex.  A single user will only make at max a few events per minute, e.g. an event to press play on a content item, a few events to seek forward, an event to pause or stop etc.  In a scenario where the user was interacting with 
 the application many times in a short period of time e.g we were tracking the exact mouse position on screen, we may use a transmission method such a websocket or gRPC stream.
 
-To enable interoperability between the frontend HTTP POST request and Kafka, we use a HTTP to Kafka bridge as an adaptor e.g https://strimzi.io/
-which allows us to send HTTP request data directly to the Kafka topic.  We will additonally need a reverse proxy service to allow us to
-accept a secure HTTPS request from the front end, which can in turn forward on to a the HTTP-Kafka bridge.  For this we can use an AWS ELB
-and Kong as an ingress.
+To enable interoperability between the frontend HTTP POST request and Kafka, we use a HTTP to Kafka bridge as an adaptor e.g https://strimzi.io/ which allows us to send HTTP request data directly to the Kafka topic.  We will additonally need a reverse proxy service to allow us to
+accept a secure HTTPS request from the front end, which can in turn forward on to a the HTTP-Kafka bridge.  For this we can use an AWS ELB and Kong as an ingress.
 
 The data payload which is delivered from the front end can contain something similar to the following format. For readability and usability with Python, the schema
 has been expressed in Pydantic classes.  We could use Protobuf or JSON schema if we wish to achieve more language agnostic schema format representation, however in the
@@ -220,3 +215,12 @@ Todo
     - Set up kafka sdk to pull from kafka
 - Simulates a object storage location using Minio
     - Set up a local minio instance
+
+2hours
+
+- Add to diagram
+    - Autoscaling setup
+- Get the script to add kafka messages working: 20 mins
+- Get the storage script working manually: 30 mins
+- Add some tests: a manual integration test would be ideal: 30 mins
+- Refactor: 30 mins

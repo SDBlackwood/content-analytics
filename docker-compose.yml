@@ -5,11 +5,12 @@ services:
     container_name: broker
     environment:
       KAFKA_NODE_ID: 1
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,OUTSIDE:PLAINTEXT
       KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: PLAINTEXT://kafka:9092,CONTROLLER://kafka:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENERS: PLAINTEXT://kafka:9092,CONTROLLER://kafka:9093,OUTSIDE://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,CONTROLLER://kafka:9093,OUTSIDE://localhost:29092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
@@ -23,8 +24,9 @@ services:
       retries: 5
       start_period: 30s
     ports:
-      - "0.0.0.0:9092:9092"
-      - "0.0.0.0:9093:9093"
+      - "29092:29092"
+      - "9092:9092"
+      - "9093:9093"
 
   # Run the script to create a topic
   kafka-init:
@@ -102,19 +104,19 @@ services:
       - TOPIC=media-events
     restart: on-failure
 
-  store-events:
-    build:
-      context: .
-      dockerfile: docker/generate/Dockerfile
-    container_name: store-events
-    depends_on:
-      kafka:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    volumes:
-      - ./content_analytics:/app/content_analytics
-    command: python -m content_analytics.store_events_simple
+  # store-events:
+  #   build:
+  #     context: .
+  #     dockerfile: docker/generate/Dockerfile
+  #   container_name: store-events
+  #   depends_on:
+  #     kafka:
+  #       condition: service_healthy
+  #     minio:
+  #       condition: service_healthy
+  #   volumes:
+  #     - ./content_analytics:/app/content_analytics
+  #   command: python -m content_analytics.store_events_simple
 
 volumes:
   postgres-db-volume:

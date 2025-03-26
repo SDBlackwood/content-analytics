@@ -7,9 +7,7 @@ from kafka import KafkaProducer
 from faker import Faker
 import sys
 
-# Add the parent directory to the path so we can import utils
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils.data_model import MediaEvent
+from content_analytics.utils.data_model import MediaEvent
 
 # Lib for creating fake data
 fake = Faker()
@@ -87,11 +85,7 @@ def generate_media_event(event_type=None, user=None, content=None):
 
 def send_events_to_kafka(batch_size, topic, bootstrap_servers):
     producer = KafkaProducer(
-        bootstrap_servers=bootstrap_servers,
-        # Essential configuration
-        retries=3,
-        acks="1",
-        batch_size=16384,
+        bootstrap_servers="localhost:29092",
     )
 
     # Pre-generate some users and content for reuse
@@ -109,8 +103,7 @@ def send_events_to_kafka(batch_size, topic, bootstrap_servers):
 
         # report/flush every 100 message
         if (i + 1) % 100 == 0:
-            progress = (i + 1) / batch_size * 100
-            print(f"Progress: {progress:.1f}% ({i + 1}/{batch_size})")
+            print(f"Progress: {i + 1}/{batch_size}")
             producer.flush()
 
     producer.flush()
@@ -121,6 +114,6 @@ if __name__ == "__main__":
     # Get configuration from environment variables
     batch_size = int(os.environ.get("BATCH_SIZE", "10000000"))
     topic = os.environ.get("TOPIC", "media-events")
-    servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+    servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092")
 
     send_events_to_kafka(batch_size, topic, servers)
