@@ -7,7 +7,7 @@ See [docs](docs) for more details.
 
 ## Part 1: High-Level Architecture Design
 
-See the [Figma Diagram](https://www.figma.com/board/77tO7NRcYo8azEseWuHhpI/Content-Analytics?node-id=0-1&p=f&t=nrOYle4o9LpDfLTm-0) and [architecture.md](docs/architecture.md) for more details.
+See the [Figma Diagram](https://www.figma.com/board/77tO7NRcYo8azEseWuHhpI/Content-Analytics?node-id=26-2198&t=ao9I2QNvKoG4aGy0-1) and [architecture.md](docs/architecture.md) for more details.
 
 ## Part 2: Implementation
 
