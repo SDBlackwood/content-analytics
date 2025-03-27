@@ -1,4 +1,9 @@
 ## Part 1: High-Level Architecture Design
+
+![Architecture Diagram](../exported.png)
+
+See the [Figma Diagram](https://www.figma.com/board/77tO7NRcYo8azEseWuHhpI/Content-Analytics?node-id=26-2198&t=ao9I2QNvKoG4aGy0-1).  The diagram has details of the componetns and design decisions, but there are some more details and notes below.
+
 ### Ingestion
 
 The system ingests data via the users device via a HTTP POST request made by the users device when a content analytic event is created. Simple HTTP REST is used here as there is no need for anything more complex. A single user will only make at max a few events per minute, e.g. an event to press play on a content item, a few events to seek forward, an event to pause or stop etc. In a scenario where the user was interacting with the application many times in a short period of time e.g we were tracking the exact mouse position on screen, we may use a transmission method such a websocket or gRPC stream.
