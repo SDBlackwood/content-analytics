@@ -2,8 +2,8 @@
 
 See [docs](docs) for more details.
 
-[Part 1: High-Level Architecture Design](docs/architecture.md)
-[Part 2: Implementation](docs/implementation.md)
+- [Part 1: High-Level Architecture Design](docs/architecture.md)
+- [Part 2: Implementation](docs/implementation.md)
 
 ## Part 1: High-Level Architecture Design
 
