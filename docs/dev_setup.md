@@ -45,6 +45,11 @@ To run the test with both flags:
  poetry run pytest tests/test_e2e.py -s --integration --add-events
 ``` 
 
+> [!note] The test is a work in progress and hasn't been verified to pass as of 27/03/2025 12:00
+> Records can be manually viewed in Kafka UI at `http://localhost:8080/ui/clusters/local/all-topics/media-events`
+> and Parquet files can be viewed in the MinIO UI at `http://localhost:9001/browser/content-analytics`
+> but the test doesn't assert that the number of records is correct yet.  
+
 ## Env variables
 
 This project uses Pydantic Settings for type-safe configuration management. This document explains how the configuration system works and how to use it in your code.  Each setting can be set via environment variables with the same name as the field:

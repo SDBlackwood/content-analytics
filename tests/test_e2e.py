@@ -98,7 +98,10 @@ def test_e2e(request, s3_client, consumer):
 
     # Using Pandas, read all the parquet files and assert that the number of records is correct
     df = pd.read_parquet(files)
-    print(len(df))
+    print(f"Number of records in parquet files: {len(df)}")
+
+    # NOTE: This is a work in progress and hasn't been verified to pass as of 27/03/2025 12:00
+
     assert len(df) == batch_size
 
 

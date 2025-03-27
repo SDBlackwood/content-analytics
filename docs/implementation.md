@@ -5,15 +5,14 @@ See the [dev_setup.md](dev_setup.md) for more details on how to run the prototyp
 ## The component you chose and why.
 
 I chose to implement the storage component of the system as it contained the most unique aspects to the challenges domain and allowed for experimentation in parquet which would give me more insights into the potential ML ready operations which could be performed on the data.
-
 ## How your prototype fits into the overall data pipeline.
 
-This implementation focuses on the storage component of the content analytics pipeline, which processes media events from Kafka and stores them as Parquet files in S3-compatible object storage (MinIO for local development). 
+This implementation focuses on the storage component of the content analytics pipeline, which processes media events from Kafka and stores them as Parquet files in S3-compatible object storage (MinIO for local development).
 
-The local development envionment for the prototype sets up a Kafka cluster and injects 5M records into the `media-events` topic.  We also set up a local MinIO instance to store the parquet files into.  This setup allows us to test the prototype end to end and validate the assumptions made in the architecture design and test it for performance. 
-
+The local development environment for the prototype sets up a Kafka cluster and injects 5M records into the `media-events` topic. We also set up a local MinIO instance to store the parquet files into. This setup allows us to test the prototype end to end and validate the assumptions made in the architecture design and test it for performance.
 ## ML Readiness
-Storing data as parquet provides us with the benefit of a data format which is tailored for data exploration and ML tasks.  We store many multiple records in a single file with each field as a seperate column which can be queried and agregated upon e.g (Note these are examples and havn't been tested)
+
+Storing data as parquet provides us with the benefit of a data format which is tailored for data exploration and ML tasks. We store many multiple records in a single file with each field as a separate column which can be queried and aggregated upon e.g
 
 Filter by a given event time and /or user
 ```python
