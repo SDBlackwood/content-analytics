@@ -45,3 +45,22 @@ To run the test with both flags:
  poetry run pytest tests/test_e2e.py -s --integration --add-events
 ``` 
 
+## Env variables
+
+This project uses Pydantic Settings for type-safe configuration management. This document explains how the configuration system works and how to use it in your code.  Each setting can be set via environment variables with the same name as the field:
+
+```
+KAFKA_BOOTSTRAP_SERVERS=localhost:29092
+S3_BUCKET=content-analytics
+```
+## Configuration Files
+
+- **`.env.dist`**: Template with development-focused settings
+- **`.env`**: Your local configuration
+
+### Initialization Containers
+
+This uses init containers to set up the development environment automatically when Docker Compose starts:
+
+1. **Kafka Init Container**: Creates required Kafka topics automatically on startup to ensure the messaging infrastructure is ready for development. This eliminates the need to manually create topics via CLI commands.
+2. **MinIO Setup Container**: Creates required buckets in the S3-compatible storage when the system starts. This ensures consistent storage configuration across development environments.

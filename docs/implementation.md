@@ -1,65 +1,46 @@
 # Content Analytics Pipeline - Storage Implementation
 
-This implementation focuses on the storage component of the content analytics pipeline, which processes media events from Kafka and stores them as Parquet files in S3-compatible object storage.
+See the [dev_setup.md](dev_setup.md) for more details on how to run the prototype.
 
-## Overview
+## The component you chose and why.
 
-1. **Kafka**: Used to ingest data from user events.
-2. **MinIO**: An S3-compatible object storage service for storing processed Parquet files. Minio is used during local
-development but any object storage can be used in production.
-3. **Airflow**: Used for orchestrating storage processing.
+I chose to implement the storage component of the system as it contained the most unique aspects to the challenges domain and allowed for experimentation in parquet which would give me more insights into the potential ML ready operations which could be performed on the data.
 
-## Development Setup
+## How your prototype fits into the overall data pipeline.
 
-1. Start the services using Docker Compose:
+This implementation focuses on the storage component of the content analytics pipeline, which processes media events from Kafka and stores them as Parquet files in S3-compatible object storage (MinIO for local development). 
 
-```bash
-docker-compose up
+The local development envionment for the prototype sets up a Kafka cluster and injects 5M records into the `media-events` topic.  We also set up a local MinIO instance to store the parquet files into.  This setup allows us to test the prototype end to end and validate the assumptions made in the architecture design and test it for performance. 
+
+## ML Readiness
+Storing data as parquet provides us with the benefit of a data format which is tailored for data exploration and ML tasks.  We store many multiple records in a single file with each field as a seperate column which can be queried and agregated upon e.g (Note these are examples and havn't been tested)
+
+Filter by a given event time and /or user
+```python
+user_plays = spark.read.parquet("s3://content-analytics/events/") \
+    .filter("user_id = 'user_123' AND event_type = 'play'")
+``` 
+
+Create aggregations to determine the number of play events during a given period for each media item
+```python
+from pyspark.sql.functions import count
+
+plays_last_month = (spark.read.parquet("s3://content-analytics/events/")
+    .filter("event_type = 'play' AND date BETWEEN '2025-02-25' AND '2025-03-25'")
+    .groupBy("content_id", "title")
+    .agg(count("*").alias("play_count"))
+    .orderBy("play_count"))
 ```
 
-### Initialization Containers
-
-This uses init containers to set up the development environment automatically when Docker Compose starts:
-
-1. **Kafka Init Container**: Creates required Kafka topics automatically on startup to ensure the messaging infrastructure is ready for development. This eliminates the need to manually create topics via CLI commands.
-2. **MinIO Setup Container**: Creates required buckets in the S3-compatible storage when the system starts. This ensures consistent storage configuration across development environments.
-3. **Airflow Init Container**: Handles database initialization and user creation for the Airflow webserver. This container runs only once at startup to ensure the Airflow environment is properly configured.
-
-
-## Set up
-
-1. Generate sample events and send them to Kafka:
-
-```bash
-# Run in batch mode to generate 1M events (this was done as a init container due to local connection issues)
-docker compose -f docker-compose.yml up -d event-generator
-```
-
-## Service Access
-
-- **Kafka UI**: http://localhost:8080
-- **MinIO Console**: http://localhost:9001 (Login: minioadmin / minioadmin)
-- **Airflow Web UI**: http://localhost:8081 (Login: airflow / airflow)
-
-## Env variables
-
-This project uses Pydantic Settings for type-safe configuration management. This document explains how the configuration system works and how to use it in your code.  Each setting can be set via environment variables with the same name as the field:
+Using parquet we can partion the data in the storage location to allow for more easy reading from disk (as redundant data is skipped when filtering) and for a more human readable data format.  For this purpose we can partion the data per event type e.g `play`, `pause`, `stop` etc.  and `date`.  The stucture of the data would look like so
 
 ```
-KAFKA_BOOTSTRAP_SERVERS=localhost:29092
-S3_BUCKET=content-analytics-dev
-APP_DEBUG=true
+  s3://media-analytics/events/event_type=play/date=2025-03-25/
+  s3://media-analytics/events/event_type=pause/date=2025-03-25/
+  s3://media-analytics/events/event_type=stop/date=2025-03-25/
+  s3://media-analytics/events/event_type=play/date=2025-04-02/
+  ...
 ```
-## Configuration Files
 
-- **`.env.dist`**: Template with development-focused settings
-- **`.env`**: Your local configuration
+The data has been partitioned this way but it is not required to be done this way.  We would want to analyse the access patterns for the data before making any decisions on the partitioning strategy.
 
-
-## Docker
-There are 2 docker files: one for the airflow workflow and 1 for the data generation script.  
-To allow developers to have a local venv and run command locally/have dependecies picked up by an LSP, depenencies are in the pyproject toml in groups and are then exported to
-requirements files for each docker image with:
-
-poetry export --with=airflow -f requirements.txt --output docker/workflow/requirements.txt
-poetry export --with=generate -f requirements.txt --output docker/workflow/requirements.txt
