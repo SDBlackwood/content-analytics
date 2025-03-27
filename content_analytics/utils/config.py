@@ -27,7 +27,6 @@ class Settings(BaseSettings):
     s3_secret_access_key: str = Field("minioadmin", description="S3 secret access key")
     s3_bucket: str = Field("content-analytics", description="S3 bucket name")
     s3_region: str = Field("us-east-1", description="S3 region")
-    s3_use_ssl: bool = Field(False, description="Use SSL for S3 connection")
 
     # Batch processing settings
     batch_size: int = Field(
@@ -37,10 +36,7 @@ class Settings(BaseSettings):
         30, description="Timeout for polling Kafka in seconds"
     )
     batch_poll_interval_ms: int = Field(
-        5000, description="Poll interval in milliseconds"
-    )
-    batch_max_poll_interval_ms: int = Field(
-        300000, description="Maximum poll interval in milliseconds"
+        10000, description="Poll interval in milliseconds"
     )
 
     # Storage settings
@@ -64,14 +60,6 @@ class Settings(BaseSettings):
     # Security settings
     encryption_enabled: bool = Field(False, description="Enable encryption")
     encryption_key: Optional[str] = Field(None, description="Encryption key")
-
-    # Application settings
-    app_debug: bool = Field(False, description="Debug mode")
-    app_environment: str = Field(
-        "production", description="Environment (development, staging, production)"
-    )
-    app_host: str = Field("0.0.0.0", description="Application host")
-    app_port: int = Field(8000, description="Application port")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

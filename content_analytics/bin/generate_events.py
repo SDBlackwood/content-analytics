@@ -5,9 +5,10 @@ import os
 from datetime import datetime
 from kafka import KafkaProducer
 from faker import Faker
-import sys
+
 
 from content_analytics.utils.data_model import MediaEvent
+from content_analytics.utils.config import settings
 
 # Lib for creating fake data
 fake = Faker()
@@ -89,10 +90,10 @@ def generate_media_event(event_type=None, user=None, content=None):
 
 def send_events_to_kafka(batch_size, topic, bootstrap_servers):
     producer = KafkaProducer(
-        bootstrap_servers="localhost:29092",
+        bootstrap_servers=bootstrap_servers,
     )
 
-    # Pre-generate some users and content for reuse
+    # Create random users and content of either 100 users/10% of batch size or 200 contents/5% of batch size
     users = [generate_random_user() for _ in range(min(batch_size // 10, 100))]
     contents = [generate_random_content() for _ in range(min(batch_size // 5, 200))]
 
@@ -116,8 +117,8 @@ def send_events_to_kafka(batch_size, topic, bootstrap_servers):
 
 if __name__ == "__main__":
     # Get configuration from environment variables
-    batch_size = int(os.environ.get("BATCH_SIZE", "10000000"))
-    topic = os.environ.get("TOPIC", "media-events")
-    servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092")
+    batch_size = settings.batch_size
+    topic = settings.kafka_topic
+    servers = settings.kafka_bootstrap_servers
 
     send_events_to_kafka(batch_size, topic, servers)

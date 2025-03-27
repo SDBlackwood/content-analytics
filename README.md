@@ -18,3 +18,10 @@ See the [implementation.md](docs/implementation.md) for more details.
 ## Dev Setup
 
 See the [dev_setup.md](docs/dev_setup.md) for more details.
+
+todo
+
+- add end to end test for 5m records 45mins
+- test the parquet precompyte stuff 30mins 
+- Refacotr 30 mins 
+- Update diagram and docs 1hr

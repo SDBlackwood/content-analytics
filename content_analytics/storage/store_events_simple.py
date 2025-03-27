@@ -3,6 +3,7 @@ import json
 import uuid
 from io import BytesIO
 import pydantic
+import time
 
 import pandas as pd
 import pyarrow as pa
@@ -15,24 +16,29 @@ from content_analytics.utils.config import settings
 from content_analytics.utils.data_model import MediaEvent
 
 
-def store_events(consumer, s3_client):
+def store_events(consumer, s3_client, poll_duration_seconds=None):
     """
-    Consumes a batch of messages from Kafka and stores as Parquet files in Object Storage
+    Consumes a batch of 1M messages from Kafka and stores as Parquet files in Object Storage every 10s
     """
     print(f"Starting batch processing at {datetime.now()}")
 
     messages = []
     message_count = 0
-    start_time = datetime.now()
-
-    # Poll for BATCH_SIZE messages or until timeout
-    end_time = start_time + timedelta(seconds=settings.batch_poll_timeout_seconds)
+    start_time = time.time()
 
     print(
         f"Polling Kafka for up to {settings.batch_size} messages or {settings.batch_poll_timeout_seconds} seconds..."
     )
 
-    while datetime.now() < end_time and message_count < settings.batch_size:
+    # Poll forever so that we keep consuming messages every batch_poll_interval_ms
+    while True:
+        # For testing, allow us to stop polling after a certain duration
+        if poll_duration_seconds is not None:
+            elapsed_time = time.time() - start_time
+            if elapsed_time >= poll_duration_seconds:
+                print(f"Reached polling duration of {poll_duration_seconds} seconds")
+                break
+
         records = consumer.poll(timeout_ms=settings.batch_poll_interval_ms)
 
         if not records:
@@ -61,14 +67,23 @@ def store_events(consumer, s3_client):
             if message_count >= settings.batch_size:
                 break
 
-    if not messages:
-        print("No messages received from Kafka. Exiting.")
-        return
+        if not messages:
+            print("No messages received from Kafka.")
+            continue
 
-    # Convert Pydantic models to dictionaries before creating DataFrame
-    messages_dict = [message.model_dump() for message in messages]
-    # Call helper function to organize and store events
-    __store_as_parquet(pd.DataFrame(messages_dict), s3_client)
+        # Convert Pydantic models to dictionaries before creating DataFrame
+        messages_dict = [message.model_dump() for message in messages]
+        # Call helper function to organize and store events
+        __store_as_parquet(pd.DataFrame(messages_dict), s3_client)
+
+        # Wait for batch_poll_interval_ms (total time taken to process the batch - batch_poll_interval_ms)
+        time_taken = time.time() - start_time  # time in seconds
+        print(f"Time taken to process the batch: {time_taken:.1f}s")
+        if time_taken < settings.batch_poll_interval_ms / 1000:
+            print(
+                f"Waiting for {(settings.batch_poll_interval_ms / 1000 - time_taken):.1f}s before polling again"
+            )
+            time.sleep(settings.batch_poll_interval_ms / 1000 - time_taken)
 
 
 def __store_as_parquet(df, s3_client):
@@ -128,7 +143,6 @@ if __name__ == "__main__":
         # Consume valyes as JSON https://kafka-python.readthedocs.io/en/master/usage.html
         value_deserializer=lambda m: json.loads(m.decode("utf-8")),
         max_poll_records=settings.batch_size,
-        max_poll_interval_ms=settings.batch_max_poll_interval_ms,
         group_id=settings.kafka_topic,
     )
 
@@ -139,7 +153,6 @@ if __name__ == "__main__":
         aws_secret_access_key=settings.s3_secret_access_key,
         endpoint_url=settings.s3_endpoint_url,  # None for actual AWS S3
         region_name=settings.s3_region,
-        use_ssl=settings.s3_use_ssl,
         # For MinIO compatibility, setting addressing style to path
         config=boto3.session.Config(
             signature_version="s3v4", s3={"addressing_style": "path"}

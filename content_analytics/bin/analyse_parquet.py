@@ -19,13 +19,13 @@ def analyze_parquet_files():
     )
 
     # List objects in the bucket
-    bucket = "content-analytics"
+    bucket = settings.s3_bucket
     prefix = settings.storage_base_path
 
     response = s3_client.list_objects_v2(Bucket=bucket, Prefix=prefix)
 
     if "Contents" not in response:
-        return {"error": "No files found in bucket"}
+        return 0, {"error": "No files found in bucket"}
 
     results = []
 

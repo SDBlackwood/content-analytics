@@ -34,3 +34,14 @@ These are integration tests which analyse the results of the storage script.
 poetry run pytest
 ```
 
+There is a single integration test which can insert events into kafka and then runs the storage script and then asserts that the number of records in S3 is correct. There are 2 flags here:
+
+- `--integration` - runs the test as an integration test
+- `--add-events` - adds events to kafka before running the test
+
+To run the test with both flags:
+
+```bash
+ poetry run pytest tests/test_e2e.py -s --integration --add-events
+``` 
+
