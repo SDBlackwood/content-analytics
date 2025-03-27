@@ -89,5 +89,4 @@ services:
 
 
 volumes:
-  postgres-db-volume:
   minio_data: 
