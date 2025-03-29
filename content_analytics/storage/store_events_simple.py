@@ -46,6 +46,8 @@ def store_events(consumer, s3_client, poll_duration_seconds=None):
             continue
 
         # Process the batch of records
+        batch_messages = 0
+        batch_time = time.time()
         for _, partition_messages in records.items():
             for message in partition_messages:
                 try:
@@ -53,7 +55,8 @@ def store_events(consumer, s3_client, poll_duration_seconds=None):
                     event = MediaEvent.model_validate(message.value)
                     # Append validated event to messages
                     messages.append(event)
-                    message_count += 1
+                    batch_messages += 1
+                    message_count += batch_messages
                 except pydantic.ValidationError as e:
                     print(f"Pydantic validation error processing message: {e}")
                     continue
@@ -77,9 +80,12 @@ def store_events(consumer, s3_client, poll_duration_seconds=None):
         __store_as_parquet(pd.DataFrame(messages_dict), s3_client)
 
         # Wait for batch_poll_interval_ms (total time taken to process the batch - batch_poll_interval_ms)
-        time_taken = time.time() - start_time  # time in seconds
-        print(f"Time taken to process the batch: {time_taken:.1f}s")
-        if time_taken < settings.batch_poll_interval_ms / 1000:
+        total_time_taken = time.time() - start_time  # time in seconds
+        print(f"\nTime taken to process the batch: {time.time() - batch_time:.1f}s")
+        print(f"TOTAL Time taken: {total_time_taken:.1f}s")
+        print(f"Records processed: {batch_messages}")
+        print(f"TOTAL records processed: {message_count}")
+        if batch_time < settings.batch_poll_interval_ms / 1000:
             print(
                 f"Waiting for {(settings.batch_poll_interval_ms / 1000 - time_taken):.1f}s before polling again"
             )

@@ -1,14 +1,16 @@
 import pytest
+import pyarrow as pa
 from content_analytics.bin.generate_events import send_events_to_kafka
 from content_analytics.storage.store_events_simple import store_events
 import boto3
-from content_analytics.utils.config import settings
 from kafka import KafkaClient
 from kafka.consumer import KafkaConsumer
 from kafka.structs import TopicPartition
 import pandas as pd
 import json
 import time
+from s3fs.core import S3FileSystem
+from content_analytics.utils.config import settings
 
 
 # S3 client fixture
@@ -64,7 +66,7 @@ def consumer():
     reason="Only run when --integration is given",
 )
 def test_e2e(request, s3_client, consumer):
-    batch_size = 5000000
+    batch_size = 50000
     topic = "media-events"
     bootstrap_servers = "localhost:29092"
     add_events = request.config.getoption(
@@ -88,16 +90,17 @@ def test_e2e(request, s3_client, consumer):
     records = s3_client.list_objects_v2(Bucket=settings.s3_bucket)
     print(f"Number of records in S3: {len(records)}")
 
-    # Download all the parquet files and assert that the number of records is correct
-    files = []
-    for obj in records["Contents"]:
-        file = s3_client.download_file(
-            Bucket=settings.s3_bucket, Key=obj["Key"], Filename=obj["Key"]
-        )
-        files.append(file)
-
     # Using Pandas, read all the parquet files and assert that the number of records is correct
-    df = pd.read_parquet(files)
+    df = pd.read_parquet(
+        # Pass just the parqent dirctory
+        "s3://content-analytics/",
+        storage_options={
+            "key": settings.s3_secret_access_key,
+            "secret": settings.s3_secret_access_key,
+            "client_kwargs": {"endpoint_url": settings.s3_endpoint_url},
+        },
+        engine="fastparquet",
+    )
     print(f"Number of records in parquet files: {len(df)}")
 
     # NOTE: This is a work in progress and hasn't been verified to pass as of 27/03/2025 12:00
@@ -122,6 +125,7 @@ def check_consumer_group(topic, group_id):
         enable_auto_commit=False,
         auto_offset_reset="earliest",
     )
+
     consumer.poll(timeout_ms=10)
 
     # Get topic partitions
