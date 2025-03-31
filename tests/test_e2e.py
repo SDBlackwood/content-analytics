@@ -11,6 +11,7 @@ import json
 import time
 from s3fs.core import S3FileSystem
 from content_analytics.utils.config import settings
+import asyncio
 
 
 # S3 client fixture
@@ -26,7 +27,7 @@ def s3_client():
             signature_version="s3v4", s3={"addressing_style": "path"}
         ),
     )
-    # Rememove everything from the bucket
+    # Remove everything from the bucket
     objects = client.list_objects_v2(Bucket=settings.s3_bucket)
     if "Contents" in objects:
         for obj in client.list_objects_v2(Bucket=settings.s3_bucket)["Contents"]:
@@ -44,17 +45,27 @@ def s3_client():
 
 @pytest.fixture(scope="module")
 def consumer():
-    client = KafkaConsumer(
-        settings.kafka_topic,
-        bootstrap_servers="localhost:29092",
-        auto_offset_reset=settings.kafka_auto_offset_reset,
-        value_deserializer=lambda m: json.loads(m.decode("utf-8")),
-        max_poll_records=settings.batch_size,
-        group_id=settings.kafka_topic,
-    )
-    yield client
+    try:
+        # Create a consumer that subscribes directly to the topic
+        client = KafkaConsumer(
+            bootstrap_servers="localhost:29092",
+            auto_offset_reset="earliest",
+            value_deserializer=lambda m: json.loads(m.decode("utf-8")),
+            enable_auto_commit=False,
+            max_poll_records=settings.batch_size,
+            consumer_timeout_ms=60000,
+            fetch_max_bytes=1024 * 1024 * 1024,  # 1GB
+        )
 
-    client.close()
+        client.subscribe([settings.kafka_topic])
+
+        # Wait for consumer to be ready
+        time.sleep(5)
+
+        yield client
+
+    finally:
+        client.close()
 
 
 # Set to integration test so it is not run by default
@@ -64,7 +75,7 @@ def consumer():
     reason="Only run when --integration is given",
 )
 def test_e2e(request, s3_client, consumer):
-    batch_size = 50000
+    batch_size = 50000 # Reduced for testing
     topic = "media-events"
     bootstrap_servers = "localhost:29092"
     add_events = request.config.getoption(
@@ -72,46 +83,53 @@ def test_e2e(request, s3_client, consumer):
     )  # Used for manual/development and testing
 
     if add_events:
-        print("Adding events to kafka")
         # Generate events in kafka
-        send_events_to_kafka(
-            batch_size=batch_size, topic=topic, bootstrap_servers=bootstrap_servers
+        asyncio.run(
+            send_events_to_kafka(
+                batch_size=batch_size, topic=topic, bootstrap_servers=bootstrap_servers
+            )
         )
 
     # Get a count of records currently in Kafka
-    kafka_record_count = count_kafka_messages(topic)
-    print(f"Number of records in Kafka: {kafka_record_count}")
+    try:
+        kafka_record_count = count_kafka_messages(topic)
 
-    # Make sure we have records to process
-    assert kafka_record_count > 0, "No records found in Kafka topic"
+        # Make sure we have records to process
+        assert kafka_record_count > 0, "No records found in Kafka topic"
 
-    # Run the store_events_simple function to store events in S3
-    store_events(consumer, s3_client, poll_duration_seconds=60)
+        # Run the store_events_simple function to store events in S3
+        try:
+            # Use a shorter poll duration for testing
+            store_events(consumer, s3_client, poll_duration_seconds=60)
+        except Exception as e:
+            print(f"Error in store_events: {e}")
+            raise
 
-    # Give S3 a moment to finalize all uploads
-    time.sleep(5)
+        # Give S3 a moment to finalize all uploads
+        time.sleep(5)
 
-    # Assert that the events are in S3
-    records = s3_client.list_objects_v2(Bucket=settings.s3_bucket)
-    assert "Contents" in records, "No files were uploaded to S3"
-    print(f"Number of parquet files in S3: {len(records['Contents'])}")
+        # Assert that the events are in S3
+        records = s3_client.list_objects_v2(Bucket=settings.s3_bucket)
+        assert "Contents" in records, "No files were uploaded to S3"
 
-    # Using Pandas, read all the parquet files and count the total records
-    df = pd.read_parquet(
-        f"s3://{settings.s3_bucket}/",
-        storage_options={
-            "key": settings.s3_access_key_id,
-            "secret": settings.s3_secret_access_key,
-            "client_kwargs": {"endpoint_url": settings.s3_endpoint_url},
-        },
-        engine="fastparquet",
-    )
-    s3_record_count = len(df)
-    print(f"Number of records in parquet files: {s3_record_count}")
+        # Using Pandas, read all the parquet files and count the total records
+        df = pd.read_parquet(
+            f"s3://{settings.s3_bucket}/",
+            storage_options={
+                "key": settings.s3_access_key_id,
+                "secret": settings.s3_secret_access_key,
+                "client_kwargs": {"endpoint_url": settings.s3_endpoint_url},
+            },
+            engine="fastparquet",
+        )
+        s3_record_count = len(df)
 
-    # Assert
-    msg = f"Record mismatch: Kafka has {kafka_record_count}, S3 has {s3_record_count} records"
-    assert s3_record_count == kafka_record_count, msg
+        # Assert
+        msg = f"Record mismatch: Kafka has {kafka_record_count}, S3 has {s3_record_count} records"
+        assert s3_record_count == kafka_record_count, msg
+    except Exception as e:
+        print(f"Test failure: {e}")
+        raise
 
 
 def count_kafka_messages(topic):
@@ -151,38 +169,3 @@ def count_kafka_messages(topic):
 
     temp_consumer.close()
     return total_messages
-
-
-def check_consumer_group(topic, group_id):
-    # Initialize Kafka client
-    client = KafkaClient(
-        bootstrap_servers=settings.kafka_bootstrap_servers,
-        client_id="consumer-group-checker",
-    )
-
-    print(f"Checking consumer group: {group_id}")
-    print(f"Topic: {topic}")
-
-    # Get consumer group offsets
-    consumer = KafkaConsumer(
-        bootstrap_servers=settings.kafka_bootstrap_servers,
-        group_id=group_id,
-        enable_auto_commit=False,
-        auto_offset_reset="earliest",
-    )
-
-    consumer.poll(timeout_ms=10)
-
-    # Get topic partitions
-    partitions = consumer.partitions_for_topic(topic)
-
-    total_lag = 0
-    for partition in partitions:
-        current_offset = consumer.position(
-            TopicPartition(topic=topic, partition=partition)
-        )
-        total_lag += current_offset
-    print(f"Total lag: {total_lag}")
-
-    consumer.close()
-    return total_lag

@@ -3,7 +3,7 @@ import uuid
 import random
 import asyncio
 from datetime import datetime
-from aiokafka import AIOKafkaProducer  
+from aiokafka import AIOKafkaProducer
 from faker import Faker
 
 
@@ -114,7 +114,7 @@ async def send_events_to_kafka(batch_size, topic, bootstrap_servers):
 
             # report/flush every 100 messages
             if (i + 1) % 100 == 0:
-                print(f"Progress: {i + 1}/{batch_size}")                
+                print(f"Progress: {i + 1}/{batch_size}")
 
                 # Wait for all pending messages to be sent
                 if tasks:

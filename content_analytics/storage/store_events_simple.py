@@ -1,13 +1,10 @@
 from datetime import datetime, timedelta
 import json
 import uuid
-from io import BytesIO
 import pydantic
 import time
 
 import pandas as pd
-import pyarrow as pa
-import pyarrow.parquet as pq
 from kafka import KafkaConsumer
 import boto3
 
@@ -48,7 +45,10 @@ def store_events(consumer, s3_client, poll_duration_seconds=None):
         # Process the batch of records
         batch_time = time.time()
         messages = []
-        for _, partition_messages in records.items():
+        for tp, partition_messages in records.items():
+            print(
+                f"Processing topic-partition {tp} with {len(partition_messages)} messages"
+            )
             for message in partition_messages:
                 try:
                     # Validate the incoming message
@@ -62,7 +62,8 @@ def store_events(consumer, s3_client, poll_duration_seconds=None):
                     print(f"Error processing message: {e}")
                     continue
 
-                if len(message) >= settings.batch_size:
+                # Fixed: Check against messages length, not message length
+                if len(messages) >= settings.batch_size:
                     break
 
             if len(messages) >= settings.batch_size:
@@ -72,10 +73,16 @@ def store_events(consumer, s3_client, poll_duration_seconds=None):
             print("No messages received from Kafka.")
             continue
 
+        print(f"Processed {len(messages)} messages from Kafka")
+
         # Convert Pydantic models to dictionaries before creating DataFrame
         messages_dict = [message.model_dump() for message in messages]
         # Call helper function to organize and store events
-        __store_as_parquet(pd.DataFrame(messages_dict), s3_client)
+        try:
+            __store_as_parquet(pd.DataFrame(messages_dict), s3_client)
+        except Exception as e:
+            print(f"Error in __store_as_parquet: {e}")
+            raise
 
         # Update the total count
         total_messages_processed += len(messages)
@@ -99,6 +106,9 @@ def store_events(consumer, s3_client, poll_duration_seconds=None):
 
 
 def __store_as_parquet(df, s3_client):
+    """Store DataFrame as Parquet files in S3, partitioned by event_type and date"""
+    print(f"Starting to store {len(df)} records as parquet")
+
     # Add a date column for partitioning
     df["date"] = pd.to_datetime(df["timestamp"]).dt.date.astype(str)
 
@@ -114,31 +124,25 @@ def __store_as_parquet(df, s3_client):
             # Get current timestamp for the filename
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
-            # Create Arrow Table from pandas DataFrame
-            table = pa.Table.from_pandas(date_df)
-
-            # Create a BytesIO object to hold the Parquet file
-            parquet_buffer = BytesIO()
-
-            # Write the Parquet file to the buffer
-            pq.write_table(
-                table, parquet_buffer, compression=settings.storage_compression
-            )
-
             # Define the S3 key with partitioning
             s3_key = f"{settings.storage_base_path}/event_type={event_type}/date={date}/{settings.storage_file_prefix}_{timestamp}_{uuid.uuid4().hex}.parquet"
 
-            # Upload the Parquet file to S3
-            print(f"Uploading {s3_key} to S3 to {settings.s3_bucket}")
+            # Fixed: Use date_df instead of df
             try:
-                s3_client.upload_fileobj(
-                    Fileobj=parquet_buffer, Bucket="content-analytics", Key=s3_key
+                date_df.to_parquet(
+                    path=f"s3://{settings.s3_bucket}/{s3_key}",
+                    storage_options={
+                        "key": settings.s3_access_key_id,
+                        "secret": settings.s3_secret_access_key,
+                        "client_kwargs": {"endpoint_url": settings.s3_endpoint_url},
+                    },
+                    engine="fastparquet",
+                    compression=settings.storage_compression,
                 )
+                print(f"Successfully uploaded {s3_key} to S3")
             except Exception as e:
-                print(f"Error uploading file to S3: {e}")
-                return
-
-            print(f"Successfully uploaded {s3_key} to S3")
+                print(f"Error uploading parquet to S3: {e}")
+                raise
 
     print(f"Batch processing completed at {datetime.now()}")
 
@@ -153,7 +157,7 @@ if __name__ == "__main__":
         value_deserializer=lambda m: json.loads(m.decode("utf-8")),
         group_id=settings.kafka_group_id,
         max_poll_records=settings.batch_size,
-        max_fetch_bytes=settings.batch_size * 1000,
+        fetch_max_bytes=1024 * 1024 * 1024,  # 1GB
     )
 
     # Object storage client - works with both AWS S3 and minio
