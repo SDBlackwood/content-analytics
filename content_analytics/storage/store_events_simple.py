@@ -151,8 +151,9 @@ if __name__ == "__main__":
         auto_offset_reset=settings.kafka_auto_offset_reset,
         # Consume valyes as JSON https://kafka-python.readthedocs.io/en/master/usage.html
         value_deserializer=lambda m: json.loads(m.decode("utf-8")),
+        group_id=settings.kafka_group_id,
         max_poll_records=settings.batch_size,
-        group_id=settings.kafka_topic,
+        max_fetch_bytes=settings.batch_size * 1000,
     )
 
     # Object storage client - works with both AWS S3 and minio
