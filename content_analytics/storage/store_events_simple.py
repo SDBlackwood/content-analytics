@@ -22,15 +22,12 @@ def store_events(consumer, s3_client, poll_duration_seconds=None):
     """
     print(f"Starting batch processing at {datetime.now()}")
 
-    messages = []
-    message_count = 0
+    total_messages_processed = 0
     start_time = time.time()
 
-    print(
-        f"Polling Kafka for up to {settings.batch_size} messages or {settings.batch_poll_timeout_seconds} seconds..."
-    )
+    print(f"Polling Kafka for up to {settings.batch_size} messages")
 
-    # Poll forever so that we keep consuming messages every batch_poll_interval_ms
+    # Poll forever so that we keep consuming messages every batch_poll_interval_seconds
     while True:
         # For testing, allow us to stop polling after a certain duration
         if poll_duration_seconds is not None:
@@ -39,15 +36,18 @@ def store_events(consumer, s3_client, poll_duration_seconds=None):
                 print(f"Reached polling duration of {poll_duration_seconds} seconds")
                 break
 
-        records = consumer.poll(timeout_ms=settings.batch_poll_interval_ms)
+        records = consumer.poll(
+            timeout_ms=settings.batch_poll_interval_seconds * 1000,
+            max_records=settings.batch_size,
+        )
 
         if not records:
             print("No new records, continuing to poll...")
             continue
 
         # Process the batch of records
-        batch_messages = 0
         batch_time = time.time()
+        messages = []
         for _, partition_messages in records.items():
             for message in partition_messages:
                 try:
@@ -55,8 +55,6 @@ def store_events(consumer, s3_client, poll_duration_seconds=None):
                     event = MediaEvent.model_validate(message.value)
                     # Append validated event to messages
                     messages.append(event)
-                    batch_messages += 1
-                    message_count += batch_messages
                 except pydantic.ValidationError as e:
                     print(f"Pydantic validation error processing message: {e}")
                     continue
@@ -64,10 +62,10 @@ def store_events(consumer, s3_client, poll_duration_seconds=None):
                     print(f"Error processing message: {e}")
                     continue
 
-                if message_count >= settings.batch_size:
+                if len(message) >= settings.batch_size:
                     break
 
-            if message_count >= settings.batch_size:
+            if len(messages) >= settings.batch_size:
                 break
 
         if not messages:
@@ -79,17 +77,25 @@ def store_events(consumer, s3_client, poll_duration_seconds=None):
         # Call helper function to organize and store events
         __store_as_parquet(pd.DataFrame(messages_dict), s3_client)
 
-        # Wait for batch_poll_interval_ms (total time taken to process the batch - batch_poll_interval_ms)
-        total_time_taken = time.time() - start_time  # time in seconds
-        print(f"\nTime taken to process the batch: {time.time() - batch_time:.1f}s")
-        print(f"TOTAL Time taken: {total_time_taken:.1f}s")
-        print(f"Records processed: {batch_messages}")
-        print(f"TOTAL records processed: {message_count}")
-        if batch_time < settings.batch_poll_interval_ms / 1000:
-            print(
-                f"Waiting for {(settings.batch_poll_interval_ms / 1000 - batch_time):.1f}s before polling again"
-            )
-            time.sleep(settings.batch_poll_interval_ms / 1000 - batch_time)
+        # Update the total count
+        total_messages_processed += len(messages)
+
+        # Wait for batch_poll_interval_seconds (total time taken to process the batch - batch_poll_interval_seconds)
+        batch_processing_time = time.time() - batch_time  # time in seconds
+        print(f"\nTime taken to process the batch: {batch_processing_time:.1f}s")
+        print(f"TOTAL Time taken: {time.time() - start_time:.1f}s")
+        print(f"Records processed in this batch: {len(messages)}")
+        print(f"TOTAL records processed: {total_messages_processed}")
+
+        # Calculate wait time, if needed
+        is_batch_size_reached = len(messages) >= settings.batch_size
+        if (
+            batch_processing_time < settings.batch_poll_interval_seconds
+            and is_batch_size_reached
+        ):
+            wait_time = settings.batch_poll_interval_seconds - batch_processing_time
+            print(f"Waiting for {wait_time:.1f}s before polling again")
+            time.sleep(wait_time)
 
 
 def __store_as_parquet(df, s3_client):

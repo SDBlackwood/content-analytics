@@ -46,7 +46,7 @@ def s3_client():
 def consumer():
     client = KafkaConsumer(
         settings.kafka_topic,
-        bootstrap_servers="localhost:29092", 
+        bootstrap_servers="localhost:29092",
         auto_offset_reset=settings.kafka_auto_offset_reset,
         value_deserializer=lambda m: json.loads(m.decode("utf-8")),
         max_poll_records=settings.batch_size,
@@ -73,37 +73,84 @@ def test_e2e(request, s3_client, consumer):
 
     if add_events:
         print("Adding events to kafka")
-        # Generate 5M events in kafka
+        # Generate events in kafka
         send_events_to_kafka(
             batch_size=batch_size, topic=topic, bootstrap_servers=bootstrap_servers
         )
 
-    # Assert that the events are in kafka
-    # TODO: Implement this - issues during development getting kafka lag
+    # Get a count of records currently in Kafka
+    kafka_record_count = count_kafka_messages(topic)
+    print(f"Number of records in Kafka: {kafka_record_count}")
+
+    # Make sure we have records to process
+    assert kafka_record_count > 0, "No records found in Kafka topic"
 
     # Run the store_events_simple function to store events in S3
     store_events(consumer, s3_client, poll_duration_seconds=60)
 
+    # Give S3 a moment to finalize all uploads
+    time.sleep(5)
+
     # Assert that the events are in S3
     records = s3_client.list_objects_v2(Bucket=settings.s3_bucket)
-    print(f"Number of records in S3: {len(records)}")
+    assert "Contents" in records, "No files were uploaded to S3"
+    print(f"Number of parquet files in S3: {len(records['Contents'])}")
 
-    # Using Pandas, read all the parquet files and assert that the number of records is correct
+    # Using Pandas, read all the parquet files and count the total records
     df = pd.read_parquet(
-        # Pass just the parqent dirctory
-        "s3://content-analytics/",
+        f"s3://{settings.s3_bucket}/",
         storage_options={
-            "key": settings.s3_secret_access_key,
+            "key": settings.s3_access_key_id,
             "secret": settings.s3_secret_access_key,
             "client_kwargs": {"endpoint_url": settings.s3_endpoint_url},
         },
         engine="fastparquet",
     )
-    print(f"Number of records in parquet files: {len(df)}")
+    s3_record_count = len(df)
+    print(f"Number of records in parquet files: {s3_record_count}")
 
-    # NOTE: This is a work in progress and hasn't been verified to pass as of 27/03/2025 12:00
+    # Assert
+    msg = f"Record mismatch: Kafka has {kafka_record_count}, S3 has {s3_record_count} records"
+    assert s3_record_count == kafka_record_count, msg
 
-    assert len(df) == batch_size
+
+def count_kafka_messages(topic):
+    """Count the total number of messages in a Kafka topic"""
+    # Create a consumer that starts from the beginning
+    temp_consumer = KafkaConsumer(
+        bootstrap_servers=settings.kafka_bootstrap_servers,
+        auto_offset_reset="earliest",
+        enable_auto_commit=False,
+    )
+
+    # Get the partitions for the topic
+    partitions = temp_consumer.partitions_for_topic(topic)
+    if not partitions:
+        temp_consumer.close()
+        return 0
+
+    # Create TopicPartition objects
+    topic_partitions = [TopicPartition(topic, p) for p in partitions]
+
+    # Assign the consumer to these partitions
+    temp_consumer.assign(topic_partitions)
+
+    # Seek to the beginning
+    temp_consumer.seek_to_beginning()
+
+    # Get the beginning offsets
+    beginning_offsets = temp_consumer.beginning_offsets(topic_partitions)
+
+    # Get the end offsets
+    end_offsets = temp_consumer.end_offsets(topic_partitions)
+
+    # Calculate the total number of messages
+    total_messages = sum(
+        end_offsets[tp] - beginning_offsets[tp] for tp in topic_partitions
+    )
+
+    temp_consumer.close()
+    return total_messages
 
 
 def check_consumer_group(topic, group_id):

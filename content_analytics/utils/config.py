@@ -32,12 +32,7 @@ class Settings(BaseSettings):
     batch_size: int = Field(
         10000, description="Number of events to process in each batch"
     )
-    batch_poll_timeout_seconds: int = Field(
-        30, description="Timeout for polling Kafka in seconds"
-    )
-    batch_poll_interval_ms: int = Field(
-        10000, description="Poll interval in milliseconds"
-    )
+    batch_poll_interval_seconds: int = Field(10, description="Poll interval in seconds")
 
     # Storage settings
     storage_base_path: str = Field("events", description="Base path for storage")
