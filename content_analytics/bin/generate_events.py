@@ -1,9 +1,9 @@
 # Mock data script to generate 1M records into kafka (10 x 100k) for testing purposes
 import uuid
 import random
-import os
+import asyncio
 from datetime import datetime
-from kafka import KafkaProducer
+from aiokafka import AIOKafkaProducer  
 from faker import Faker
 
 
@@ -88,31 +88,48 @@ def generate_media_event(event_type=None, user=None, content=None):
     )
 
 
-def send_events_to_kafka(batch_size, topic, bootstrap_servers):
-    producer = KafkaProducer(
+async def send_events_to_kafka(batch_size, topic, bootstrap_servers):
+    # Create AIOKafkaProducer
+    producer = AIOKafkaProducer(
         bootstrap_servers=bootstrap_servers,
     )
+    await producer.start()
 
-    # Create random users and content of either 100 users/10% of batch size or 200 contents/5% of batch size
-    users = [generate_random_user() for _ in range(min(batch_size // 10, 100))]
-    contents = [generate_random_content() for _ in range(min(batch_size // 5, 200))]
+    try:
+        # Create random users and content of either 100 users/10% of batch size or 200 contents/5% of batch size
+        users = [generate_random_user() for _ in range(min(batch_size // 10, 100))]
+        contents = [generate_random_content() for _ in range(min(batch_size // 5, 200))]
 
-    print(f"Generating {batch_size} events to topic '{topic}'...")
+        print(f"Generating {batch_size} events to topic '{topic}'...")
 
-    for i in range(batch_size):
-        # Create and send event
-        event = generate_media_event(
-            user=random.choice(users), content=random.choice(contents)
-        )
-        producer.send(topic, event.model_dump_json().encode("utf-8"))
+        tasks = []
+        for i in range(batch_size):
+            # Create event
+            event = generate_media_event(
+                user=random.choice(users), content=random.choice(contents)
+            )
+            # Send event asynchronously
+            task = producer.send(topic, event.model_dump_json().encode("utf-8"))
+            tasks.append(task)
 
-        # report/flush every 100 message
-        if (i + 1) % 100 == 0:
-            print(f"Progress: {i + 1}/{batch_size}")
-            producer.flush()
+            # report/flush every 100 messages
+            if (i + 1) % 100 == 0:
+                print(f"Progress: {i + 1}/{batch_size}")                
 
-    producer.flush()
-    print(f"Completed sending {batch_size} events to '{topic}'")
+                # Wait for all pending messages to be sent
+                if tasks:
+                    await asyncio.gather(*tasks)
+                    await producer.flush()
+                    # Clear the tasks as they have been flushed
+                    tasks = []
+
+        # Final flush and wait for remaining tasks
+        if tasks:
+            await asyncio.gather(*tasks)
+        await producer.flush()
+        print(f"Completed sending {batch_size} events to '{topic}'")
+    finally:
+        await producer.stop()
 
 
 if __name__ == "__main__":
@@ -121,4 +138,5 @@ if __name__ == "__main__":
     topic = settings.kafka_topic
     servers = settings.kafka_bootstrap_servers
 
-    send_events_to_kafka(batch_size, topic, servers)
+    # Run the async function
+    asyncio.run(send_events_to_kafka(batch_size, topic, servers))
