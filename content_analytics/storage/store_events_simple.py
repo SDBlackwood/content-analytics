@@ -87,9 +87,9 @@ def store_events(consumer, s3_client, poll_duration_seconds=None):
         print(f"TOTAL records processed: {message_count}")
         if batch_time < settings.batch_poll_interval_ms / 1000:
             print(
-                f"Waiting for {(settings.batch_poll_interval_ms / 1000 - time_taken):.1f}s before polling again"
+                f"Waiting for {(settings.batch_poll_interval_ms / 1000 - batch_time):.1f}s before polling again"
             )
-            time.sleep(settings.batch_poll_interval_ms / 1000 - time_taken)
+            time.sleep(settings.batch_poll_interval_ms / 1000 - batch_time)
 
 
 def __store_as_parquet(df, s3_client):
@@ -113,7 +113,7 @@ def __store_as_parquet(df, s3_client):
 
             # Create a BytesIO object to hold the Parquet file
             parquet_buffer = BytesIO()
-            
+
             # Write the Parquet file to the buffer
             pq.write_table(
                 table, parquet_buffer, compression=settings.storage_compression

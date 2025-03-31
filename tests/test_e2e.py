@@ -20,9 +20,8 @@ def s3_client():
         "s3",
         aws_access_key_id=settings.s3_access_key_id,
         aws_secret_access_key=settings.s3_secret_access_key,
-        endpoint_url=settings.s3_endpoint_url,  # None for actual AWS S3
+        endpoint_url=settings.s3_endpoint_url,
         region_name=settings.s3_region,
-        # For MinIO compatibility, setting addressing style to path
         config=boto3.session.Config(
             signature_version="s3v4", s3={"addressing_style": "path"}
         ),
@@ -47,9 +46,8 @@ def s3_client():
 def consumer():
     client = KafkaConsumer(
         settings.kafka_topic,
-        bootstrap_servers="localhost:29092",  # Use external listener address
+        bootstrap_servers="localhost:29092", 
         auto_offset_reset=settings.kafka_auto_offset_reset,
-        # Consume valyes as JSON https://kafka-python.readthedocs.io/en/master/usage.html
         value_deserializer=lambda m: json.loads(m.decode("utf-8")),
         max_poll_records=settings.batch_size,
         group_id=settings.kafka_topic,
