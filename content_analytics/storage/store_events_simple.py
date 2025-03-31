@@ -113,14 +113,11 @@ def __store_as_parquet(df, s3_client):
 
             # Create a BytesIO object to hold the Parquet file
             parquet_buffer = BytesIO()
-
+            
             # Write the Parquet file to the buffer
             pq.write_table(
                 table, parquet_buffer, compression=settings.storage_compression
             )
-
-            # Reset buffer position
-            parquet_buffer.seek(0)
 
             # Define the S3 key with partitioning
             s3_key = f"{settings.storage_base_path}/event_type={event_type}/date={date}/{settings.storage_file_prefix}_{timestamp}_{uuid.uuid4().hex}.parquet"
