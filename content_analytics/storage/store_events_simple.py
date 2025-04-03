@@ -1,12 +1,13 @@
-from datetime import datetime, timedelta
 import json
-import uuid
-import pydantic
+import gc
 import time
+import uuid
+from datetime import datetime
 
-import pandas as pd
-from kafka import KafkaConsumer
 import boto3
+import pandas as pd
+import pydantic
+from kafka import KafkaConsumer
 
 # Import settings parsed from env
 from content_analytics.utils.config import settings
@@ -94,15 +95,8 @@ def store_events(consumer, s3_client, poll_duration_seconds=None):
         print(f"Records processed in this batch: {len(messages)}")
         print(f"TOTAL records processed: {total_messages_processed}")
 
-        # Calculate wait time, if needed
-        is_batch_size_reached = len(messages) >= settings.batch_size
-        if (
-            batch_processing_time < settings.batch_poll_interval_seconds
-            and is_batch_size_reached
-        ):
-            wait_time = settings.batch_poll_interval_seconds - batch_processing_time
-            print(f"Waiting for {wait_time:.1f}s before polling again")
-            time.sleep(wait_time)
+        # Trying to deallocate any memory before next run
+        gc.collect()
 
 
 def __store_as_parquet(df, s3_client):
